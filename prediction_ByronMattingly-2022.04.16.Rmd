@@ -1,0 +1,142 @@
+---
+title: "Practical MachineLearning Project Report: Random Forest vs. Decision Tree Models"
+author: "Byron Mattingly"
+date:   "18Apr2022"
+output:
+  html_document: default
+---
+
+```{r setup, include=FALSE,warning=FALSE,message=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Background
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). 
+
+## Data
+The training data for this project are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+## The test data are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har. If you use the document you create for this class for any purpose please cite them as they have been very generous in allowing their data to be used for this kind of assignment.
+
+## What you should submit
+
+The goal of your project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. You may use any of the other variables to predict with. You should create a report describing how you built your model, how you used cross validation, what you think the expected out of sample error is, and why you made the choices you did. You will also use your prediction model to predict 20 different test cases.
+
+## Peer Review Portion
+
+Your submission for the Peer Review portion should consist of a link to a Github repo with your R markdown and compiled HTML file describing your analysis. Please constrain the text of the writeup to < 2000 words and the number of figures to be less than 5. It will make it easier for the graders if you submit a repo with a gh-pages branch so the HTML page can be viewed online (and you always want to make it easy on graders).
+
+## Initialization and Data cleaning
+
+```{r}
+# Libraries
+library(ggplot2)
+library(lattice)
+library("caret")
+library("randomForest")
+library("rpart")
+library("rpart.plot")
+library("ranger")
+
+# Set seed for reproducability
+set.seed(9999)
+```
+
+The training_data and test_data were downloaded to the local directory and cleaned to eliminate
+observations with missing ("NA", "") and meaningless ("#DIV/0!") values. 
+
+The training dataset contains 19622 observations and 160 variables, 
+while the testing dataset contains 20 observations and 160 variables. 
+
+The `classe` variable in the training set is the outcome to predict.  
+
+```{r}
+training_data <- read.csv("pml-training.csv", na.strings = c("NA", "#DIV/0!", ""))
+dim(training_data)
+
+test_data     <- read.csv("pml-testing.csv",  na.strings = c("NA", "#DIV/0!", ""))
+dim(test_data)
+```
+
+## Data Preparation
+Data containing more than 95% of their observations equal to "NA" are removed and filtered out.
+
+```{r}
+cleanColumnIndex    <- colSums(is.na(training_data))/nrow(training_data) < 0.95
+clean_training_data <- training_data[,cleanColumnIndex]
+
+# Verify NA removal
+colSums(is.na(clean_training_data))/nrow(clean_training_data)
+colSums(is.na(clean_training_data))
+```
+
+Delete variables irrelevant to the model (columns 1 to 7):
+```{r}
+#   user_name
+# , raw_timestamp_part_1
+# , raw_timestamp_part_2
+# , cvtd_timestamp
+# , new_window
+# , num_window 
+
+clean_training_data <- clean_training_data[,-c(1:7)]
+clean_test_data     <- test_data[,-c(1:7)]
+```
+
+## Partition the training data into a training set (75%) and a cross validation set
+```{r}
+training_index <- createDataPartition(clean_training_data$classe, p=0.75)[[1]]
+training_training_data <- clean_training_data[ training_index,]
+training_crossval_data <- clean_training_data[-training_index,]
+```
+
+## and make a clean test dataset
+```{r}
+xNames          <- names(clean_training_data)
+clean_test_data <- test_data[,xNames[1:52]]
+```
+
+## Prediction Model 1: Decision Tree ML Algorithm
+
+Predict with decision tree and output the confusion matrix.
+```{r}
+decisionTreeModel      <- train(classe ~., method='rpart', data=training_training_data)
+decisionTreePrediction <- predict(decisionTreeModel, training_crossval_data)
+confusionMatrix(as.factor(training_crossval_data$classe), decisionTreePrediction)
+```
+Plot the decision tree
+```{r}
+rpart.plot(decisionTreeModel$finalModel)
+```
+
+The Estimated Accuracy of the Decision Model is 74.5%.
+The Estimated Out-of-Sample Error is 25.5%.
+
+## Prediction Model 2: Random Forest ML Algorithm
+```{r}
+randomForestModel      <- train(classe ~., method='rf', data=training_training_data, ntree=128)
+randomForestPrediction <- predict(randomForestModel, training_crossval_data)
+confusionMatrix(as.factor(training_crossval_data$classe), randomForestPrediction)
+```
+The Estimated Accuracy of the Random Forest Model is 99.9%.
+The Estimated Out-of-Sample Error is 0.12%.
+
+## Conclusion
+Random Forest Model yields better results than the Decision Tree Model
+
+## Prediction
+
+Applying the Random Forest model to the original testing dataset to predict the test set
+```{r}
+predict(randomForestModel, clean_test_data)
+
+## B A B A A E D B A A B C B A E E A B B B
+## Levels: A B C D E
+```
+
